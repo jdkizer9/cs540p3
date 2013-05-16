@@ -14,6 +14,10 @@
 
 namespace cs540 {
     
+    class OutOfRange : public std::exception {
+        const char* what() const noexcept {return "Index out of range.\n";}
+    };
+    
     template <typename T, size_t... dims>
     class Array {
     public:
@@ -22,6 +26,7 @@ namespace cs540 {
         static const size_t maxDims[Array::numDims];
         
     public:
+        
         class Iterator : public std::iterator<std::forward_iterator_tag, T>
         {
         public:
@@ -216,7 +221,11 @@ namespace cs540 {
             //assignment operator
             ArrayHelper &operator=(const ArrayHelper &other) {
                 
-                //if length != other.length, throw
+                //if length != other.length, this should never happen
+                if (length != other.length)
+                    assert(false);
+                    throw OutOfRange();
+                
                 for (int i=0; i<len; i++)
                     a_[i] = other.a_[i];
                 
@@ -227,7 +236,11 @@ namespace cs540 {
             template <typename V>
             ArrayHelper &operator=(const ArrayHelper<V, len, args...> &other) {
                 
-                //if length != other.length, throw
+                //if length != other.length, this should never happen
+                if (length != other.length)
+                    assert(false);
+                    throw OutOfRange();
+                
                 for (int i=0; i<len; i++)
                     a_[i] = other.a_[i];
                 
@@ -236,13 +249,16 @@ namespace cs540 {
             
             entry_t &operator[](const size_t i) {
                 //throw
-                //if(i<0 || i<=len)
+                if(i>=len)
+                    throw OutOfRange();
                 return a_[i];
             }
             
             const entry_t &operator[](const size_t i) const {
                 //throw
-                //if(i<0 || i<=len)
+                if(i>=len)
+                    throw OutOfRange();
+                
                 return a_[i];
             }
             
@@ -274,7 +290,11 @@ namespace cs540 {
             //assignment operator
             ArrayHelper &operator=(const ArrayHelper &other) {
                 
-                //if length != other.length, throw
+                //if length != other.length, this should never happen
+                if (length != other.length)
+                    assert(false);
+                    throw OutOfRange();
+                
                 for (int i=0; i<len; i++)
                     a_[i] = other.a_[i];
                 
@@ -284,7 +304,11 @@ namespace cs540 {
             template <typename V>
             ArrayHelper &operator=(const ArrayHelper<V, len> &other) {
                 
-                //if length != other.length, throw
+                //if length != other.length, this should never happen
+                if (length != other.length)
+                    assert(false);
+                    throw OutOfRange();
+                
                 for (int i=0; i<len; i++)
                     //setting type U to type V
                     a_[i] = other.a_[i];
@@ -294,13 +318,15 @@ namespace cs540 {
 
             U &operator[](const size_t i) {
                 //throw
-                //if(i<0 || i<=len)
+                if(i>=len)
+                    throw OutOfRange();
                 return a_[i];
             }
             
             const U &operator[](const size_t i) const {
                 //throw
-                //if(i<0 || i<=len)
+                if(i>=len)
+                    throw OutOfRange();
                 return a_[i];
             }
             
@@ -352,7 +378,6 @@ namespace cs540 {
             
         }
         
-        //TODO - self assignment must be a no-op
         Array &operator=(const Array &other) {
             
             if(&other == this)
@@ -372,12 +397,11 @@ namespace cs540 {
             return *this;
         }
         
-        //TODO - self assignment must be a no-op
         template <typename U>
         Array &operator=(const Array<U, dims...> &other) {
             
-            //reimplement using iterators
-            //we know they are the same dimenstions
+            if((void*)&other == (void*)this)
+                return *this;
             
             auto i1b = this->fmbegin();
             auto i1e = this->fmend();
