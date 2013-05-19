@@ -11,74 +11,72 @@
 
 #include <iostream>
 #include <assert.h>
+#include <pthread.h>
 
 namespace cs540 {
     
 template <typename T, typename R, typename... ATs>
 class Launcher {
-    
-public:
-    
-    Launcher(T *obj, R (T::*mem)(ATs...), ATs... args) : object(obj), ptm(mem),
-                                        argsTuple(std::make_tuple(args...)) {}
-    
-    void entry(void *o) {
-        assert(o == this);
-        
-        ((*object).*ptm)(std::get<0>(argsTuple), std::get<1>(argsTuple), std::get<2>(argsTuple));
-        //(*object).*ptm();
-    }
-    
+private:
     T *object;
     R (T::*ptm)(ATs...);
-    std::tuple<ATs...> argsTuple;
+    const std::tuple<ATs...> argsTuple;
+public:
+
+    Launcher(T *obj, R (T::*mem)(ATs...), ATs... args) : object(obj), ptm(mem),
+                                        argsTuple(std::make_tuple(args...)) {}    
+    
+    //first case is sizeof...ATs-1
+    template <size_t N, size_t... Ns>
+    class entryHelper {
+    public:
+        static void helper(Launcher *obj) {
+            std::cout<<"In Helper "<<N<<std::endl;
+            
+            //entryHelper<N-1, N, Ns...>::helper(obj);
+        }
+    };
+    
+    template <size_t... Ns>
+    class entryHelper<0, Ns...> {
+    public:
+        static void helper(Launcher *obj) {
+            //std::cout<<"In Helper 0"<<std::endl;
+            obj->entryHelper2<0,Ns...>();
+        }
+    };
+    
+    template <size_t... Ns>
+    void entryHelper2() {
+        //((*object).*ptm)(std::get<0>(argsTuple), std::get<1>(argsTuple), std::get<2>(argsTuple));
+        ((*object).*ptm)( (std::get<Ns>(argsTuple))... );
+    }
+    static void* entry(void *o) {
+        
+        Launcher *l = static_cast<Launcher *>(o);
+        //std::cout<<"There are "<<(sizeof...(ATs))<<" arguments"<<std::endl;
+        //if there are arguments, handle them and invoke ptm
+        //otherwise, just invoke ptm
+        
+        //
+        entryHelper<(sizeof...(ATs))-1>::helper(l);
+        
+        delete l;
+        return nullptr;
+    }
+      
 };
     
-template <typename T, typename R>
-class Launcher<T,R> {
-        
-    public:
-        
-        Launcher(T *obj, R (T::*mem)()) : object(obj), ptm(mem) {}
-        
-        void entry(void *o) {
-            assert(o == this);
-            
-            //(*object).*ptm(std::get<0>(argsTuple), std::get<1>(argsTuple), std::get<2>(argsTuple));
-            ((*object).*ptm)();
-        }
-        
-        T *object;
-        R (T::*ptm)();
-    };
-template <typename T, typename R>
-    pthread_t NewThread( T *obj, R (T::*mem)() ) {
-        Launcher<T, R> l(obj, mem);
-        
-        l.entry(&l);
-    }
 
 template <typename T, typename R, typename... ATs>
 pthread_t NewThread(T *obj, R (T::*mem)(ATs...), ATs... args) {
-    Launcher<T, R, ATs...> l(obj, mem, args...);
-    
-    l.entry(&l);
+    pthread_t retVal;
+    //this will be deleted in static member function entry after mem has executed
+    Launcher<T, R, ATs...> *l = new Launcher<T, R, ATs...>(obj, mem, args...);
+    std::cout<<"There are "<<sizeof...(ATs)<<" arguments"<<std::endl;
+    int i = pthread_create(&retVal, nullptr, Launcher<T,R,ATs...>::entry, l); assert(i==0);
+    return retVal;
 }
-    
-
-
-// 1) need to generate a thread entry point that invokes obj->mem(args...)
-// 2) can we create a class that contains an object, member function pointer and another object to contain the variadic arguments?
-// 2a) is there a way to store args such that it can be reproduced and used as a argument pack again?
-// 3) try std::tuple
-//  can use std::tie (args...) = tuple?
-
-//template <typename T, typename R, typename... ATs>
-//void entry<T,R,ATs...>(){
-//    
-//}
-
-//obj->mem(args...);
     
 }
 
