@@ -31,36 +31,39 @@ public:
     class entryHelper {
     public:
         static void helper(Launcher *obj) {
-            std::cout<<"In Helper "<<N<<std::endl;
-            
-            //entryHelper<N-1, N, Ns...>::helper(obj);
+            entryHelper<N-1, N, Ns...>::helper(obj);
         }
     };
     
+    //this is the terminating case where there are one or more arguments
     template <size_t... Ns>
     class entryHelper<0, Ns...> {
     public:
         static void helper(Launcher *obj) {
-            //std::cout<<"In Helper 0"<<std::endl;
             obj->entryHelper2<0,Ns...>();
+        }
+    };
+    
+    //this handles case where there are no arguments
+    template <size_t... Ns>
+    class entryHelper<(size_t)-1, Ns...> {
+    public:
+        static void helper(Launcher *obj) {
+            static_assert((sizeof...(ATs) == 0), "Programming error");
+            ((*(obj->object)).*(obj->ptm))();
         }
     };
     
     template <size_t... Ns>
     void entryHelper2() {
-        //((*object).*ptm)(std::get<0>(argsTuple), std::get<1>(argsTuple), std::get<2>(argsTuple));
         ((*object).*ptm)( (std::get<Ns>(argsTuple))... );
     }
     static void* entry(void *o) {
         
         Launcher *l = static_cast<Launcher *>(o);
-        //std::cout<<"There are "<<(sizeof...(ATs))<<" arguments"<<std::endl;
-        //if there are arguments, handle them and invoke ptm
-        //otherwise, just invoke ptm
-        
-        //
         entryHelper<(sizeof...(ATs))-1>::helper(l);
         
+        //delete Launcher object created by NewThread
         delete l;
         return nullptr;
     }
@@ -73,7 +76,6 @@ pthread_t NewThread(T *obj, R (T::*mem)(ATs...), ATs... args) {
     pthread_t retVal;
     //this will be deleted in static member function entry after mem has executed
     Launcher<T, R, ATs...> *l = new Launcher<T, R, ATs...>(obj, mem, args...);
-    std::cout<<"There are "<<sizeof...(ATs)<<" arguments"<<std::endl;
     int i = pthread_create(&retVal, nullptr, Launcher<T,R,ATs...>::entry, l); assert(i==0);
     return retVal;
 }

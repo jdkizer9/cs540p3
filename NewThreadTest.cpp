@@ -6,68 +6,133 @@
 //  Copyright (c) 2013 James Kizer. All rights reserved.
 //
 
-#include <iostream>
-#include <string>
 #include "NewThread.hpp"
+#include <pthread.h>
+#include <tuple>
+#include <set>
+#include <deque>
+#include <assert.h>
+#include <iostream>
+#include <typeinfo>
+#include <cxxabi.h>
+#include <unistd.h>
+#include <cstdint>
 
-void test(int i, double d, bool b){
-    std::cout<<"In test: i="<<i<<", d="<<d<<", b="<<b<<std::endl;
+using namespace std;
+using namespace cs540;
+
+ostream &
+operator<<(ostream &os, const type_info &ti) {
+    int ec;
+    const char *demangled_name = abi::__cxa_demangle(ti.name(), 0, 0, &ec);
+    if (ec != 0) {
+        cerr << "Demangling failure: ";
+        switch (ec) {
+            case -1:
+                cerr << "Memory allocation failure." << endl;
+                break;
+            case -2:
+                cerr << "Invalid mangled name: " << ti.name() << endl;
+                break;
+            case -3:
+                cerr << "Inalid args" << endl;
+                break;
+            default:
+                cerr << "Unknown demanglig error" << endl;
+                break;
+        }
+        assert(false); abort();
+    }
+    os << demangled_name;
+    free((void *) demangled_name);
+    return os;
 }
 
-void (*testfunc)(int, double, bool) = &test;
+class A {
+public:
+    int get(int) {
+        cout << "Called" << endl;
+        return 1;
+    }
+    double foo(const char *, int) {
+        cout << "Foo called" << endl;
+        return 1.0;
+    }
+    double foo(const char *, double) {
+        cout << "Foo2 called" << endl;
+        return 1.0;
+    }
+};
 
-template <typename... ATs>
-void TemplateTest(ATs... args){
-    //argsTuple
-    
-    std::tuple<ATs...> argsTuple(std::make_tuple(args...));
-    //testfunc(args...);
+class MyClass {
+public:
+    MyClass();
+    ~MyClass();
+    void method();
+    const set<pthread_t> &verify() const {
+        return m_verify;
+    }
+private:
+    set<pthread_t> m_verify;
+    pthread_mutex_t m_mutex;
+};
+
+MyClass::MyClass() {
+    int ec;
+    ec = pthread_mutex_init(&m_mutex, 0); assert(ec == 0);
 }
 
+MyClass::~MyClass() {
+    int ec;
+    ec = pthread_mutex_destroy(&m_mutex); assert(ec == 0);
+}
 
-class LauncherTestClass {
-public:
-    LauncherTestClass(int i_, double j_, std::string k_):i(i_), j(j_), k(k_){}
+void
+MyClass::method() {
+    int ec;
+    pthread_t tid = pthread_self();
+    ec = pthread_mutex_lock(&m_mutex); assert(ec == 0);
+    auto res = m_verify.insert(tid);
+    ec = pthread_mutex_unlock(&m_mutex); assert(ec == 0);
+    // Must have successfully inserted, since there
+    // should be no duplicates.
+    assert(res.second);
+}
+
+void *
+spawn(void *vp) {
     
-    void function(int x, double y, std::string z) {
-        i=x;
-        j=y;
-        k=z;
+    unsigned int seed = (uintptr_t(vp));
+    
+    deque<pthread_t> threads;
+    MyClass obj;
+    
+    int n = 100*(double(rand_r(&seed))/RAND_MAX);
+    for (int i = 0; i < n; i++) {
+        pthread_t tid = NewThread(&obj, &MyClass::method);
+        threads.push_back(tid);
+    }
+    for (int i = 0; i < n; i++) {
+        pthread_t tid = threads.at(i);
+        int ec = pthread_join(tid, 0); assert(ec == 0);
+    }
+    auto &verify(obj.verify());
+    for (int i = 0; i < n; i++) {
+        assert(verify.find(threads.at(i)) != verify.end());
     }
     
-    int i;
-    double j;
-    std::string k;
-};
-
-class EmptyLauncherTestClass {
-public:
-    void function(){
-        
-    }
-};
-
+    return nullptr;
+}
 
 int main() {
     
-    //TemplateTest(1, 1.0, true);
-    std::string s("This is my initial test string");
-    LauncherTestClass testObj(1, 2.2, s);
-    s = "This is my updated string";
-    //ptm
-    void (LauncherTestClass::* ptmf) (int, double, std::string) = &LauncherTestClass::function;
+    A a;
+    int ec;
     
-    //TemplateTest(3, 4.5, s);
+    pthread_t tid = NewThread(&a, static_cast<double (A::*)(const char *, double)>(&A::foo), "hello", 1.0);
+    //pthread_t tid = NewThread(&a, &A::foo, "hello", 1.0);
+    ec = pthread_join(tid, 0); assert(ec == 0);
+    sleep(1);
     
-    
-    
-    pthread_t ret = cs540::NewThread<LauncherTestClass, void, int, double, std::string> (&testObj, ptmf, 3, 4.5, s);
-    
-    //EmptyLauncherTestClass l1;
-    //void (EmptyLauncherTestClass::* lptmf) () = &EmptyLauncherTestClass::function;
-
-    
-    //pthread_t ret = cs540::NewThread<EmptyLauncherTestClass, void>( &l1, lptmf);
-    
-    
+    spawn(nullptr);
 }
